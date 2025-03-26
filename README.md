@@ -1,2 +1,2 @@
 ### User Manual Asistant with Gemini API
-## Live Link: [User Manual Asistant](https://user-manual-asistant.netlify.app/)
+## Live Link: [https://user-manual-asistant.netlify.app/](https://user-manual-asistant.netlify.app/)
