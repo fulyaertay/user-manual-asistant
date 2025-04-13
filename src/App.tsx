@@ -1,18 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Upload, Key, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Key, Loader2, Copy, Check, Edit2, Trash2, Search, Sun, Moon, Star } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import mime from 'mime-types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  timestamp?: Date;
+  isEdited?: boolean;
+  isImportant?: boolean;
 }
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Merhaba, yüklediğini kullanıcı kılavuzuyla ilgili sorularınızda size yardımcı olmak için buradayım. Öncelikle API anahtarınızı girmeniz ve kullanım kılavuzu PDF\'ini yüklemeniz gerekmektedir.\n\nDaha sonra sorularınızı yanıtlamaktan memnuniyet duyarım.'
+      content: 'Merhaba, yüklediğini kullanıcı kılavuzuyla ilgili sorularınızda size yardımcı olmak için buradayım. Öncelikle API anahtarınızı girmeniz ve kullanım kılavuzu PDF\'ini yüklemeniz gerekmektedir.\n\nDaha sonra sorularınızı yanıtlamaktan memnuniyet duyarım.',
+      timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
@@ -21,6 +27,10 @@ function App() {
   const [showApiInput, setShowApiInput] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [chatSession, setChatSession] = useState<any>(null);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -93,13 +103,65 @@ function App() {
     }
   };
 
+  const copyToClipboard = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageIndex(index);
+      setTimeout(() => setCopiedMessageIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const formatTimestamp = (date: Date) => {
+    return new Intl.DateTimeFormat('tr-TR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date);
+  };
+
+  const handleEditMessage = (index: number) => {
+    setEditingMessageIndex(index);
+    setInput(messages[index].content);
+  };
+
+  const handleDeleteMessage = (index: number) => {
+    setMessages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToggleImportant = (index: number) => {
+    setMessages(prev => prev.map((msg, i) => 
+      i === index ? { ...msg, isImportant: !msg.isImportant } : msg
+    ));
+  };
+
+  const filteredMessages = messages.filter(message => 
+    message.content.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !chatSession) return;
 
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    if (editingMessageIndex !== null) {
+      setMessages(prev => prev.map((msg, i) => 
+        i === editingMessageIndex 
+          ? { ...msg, content: userMessage, isEdited: true }
+          : msg
+      ));
+      setEditingMessageIndex(null);
+    } else {
+      setMessages(prev => [...prev, { 
+        role: 'user', 
+        content: userMessage,
+        timestamp: new Date()
+      }]);
+    }
+
     setIsLoading(true);
 
     try {
@@ -108,13 +170,15 @@ function App() {
       
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response
+        content: response,
+        timestamp: new Date()
       }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.'
+        content: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.',
+        timestamp: new Date()
       }]);
     } finally {
       setIsLoading(false);
@@ -171,7 +235,6 @@ function App() {
                   htmlFor="file-upload"
                   className="flex items-center justify-center w-full p-2 border-2 border-dashed rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
                 >
-                  <Upload className="w-5 h-5 text-gray-400 mr-2" />
                   <span className="text-gray-600">
                     {selectedFile ? selectedFile.name : 'PDF dosyası seçin...'}
                   </span>
@@ -197,16 +260,36 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
-      <div className="flex items-center justify-center bg-white shadow-sm p-4 border-b">
-        <Bot className="w-6 h-6 text-blue-600 mr-2" />
-        <h1 className="text-xl font-semibold text-gray-800">
-          Kullanıcı Kılavuzu Asistanı
-        </h1>
+    <div className={`flex flex-col h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-100'}`}>
+      <div className={`flex items-center justify-between bg-white shadow-sm p-4 border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : ''}`}>
+        <div className="flex items-center">
+          <Bot className="w-6 h-6 text-blue-600 mr-2" />
+          <h1 className="text-xl font-semibold text-gray-800">
+            Kullanıcı Kılavuzu Asistanı
+          </h1>
+        </div>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-2 rounded-full hover:bg-gray-100"
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Mesajlarda ara..."
+              className="pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
+        {filteredMessages.map((message, index) => (
           <div
             key={index}
             className={`flex ${
@@ -215,22 +298,76 @@ function App() {
           >
             <div
               className={`flex items-start space-x-2 max-w-[80%] ${
-                message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                message.role === 'user' ? '' : ''
               }`}
             >
+              {message.role === 'assistant' && (
+                <Bot className="w-6 h-6 text-blue-600" />
+              )}
               <div
-                className={`p-3 rounded-lg ${
+                className={`p-3 rounded-lg relative group ${
                   message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-800 shadow-sm'
+                    ? isDarkMode ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'
+                    : isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800 shadow-sm'
                 }`}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    {message.isImportant && (
+                      <Star className="w-4 h-4 text-yellow-400" />
+                    )}
+                    {message.isEdited && (
+                      <span className="text-xs opacity-70">(düzenlendi)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    {message.role === 'user' && (
+                      <>
+                        <button
+                          onClick={() => handleEditMessage(index)}
+                          className="p-1 rounded-full hover:bg-blue-500"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMessage(index)}
+                          className="p-1 rounded-full hover:bg-blue-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleToggleImportant(index)}
+                      className="p-1 rounded-full hover:bg-blue-500"
+                    >
+                      <Star className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(message.content, index)}
+                      className="p-1 rounded-full hover:bg-blue-500"
+                    >
+                      {copiedMessageIndex === index ? (
+                        <Check className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="prose dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+                {message.timestamp && (
+                  <div className="text-xs mt-1 opacity-70">
+                    {formatTimestamp(message.timestamp)}
+                  </div>
+                )}
               </div>
-              {message.role === 'user' ? (
+              {message.role === 'user' && (
                 <User className="w-6 h-6 text-gray-600" />
-              ) : (
-                <Bot className="w-6 h-6 text-blue-600" />
               )}
             </div>
           </div>
@@ -239,30 +376,33 @@ function App() {
           <div className="flex justify-start">
             <div className="flex items-center space-x-2 bg-white p-3 rounded-lg shadow-sm">
               <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
               </div>
+              <span className="text-sm text-gray-500">Yanıt hazırlanıyor...</span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="p-4 bg-white border-t">
+      <form onSubmit={handleSubmit} className={`p-4 border-t ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'}`}>
         <div className="flex space-x-4">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Sorunuzu yazın..."
-            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : ''
+            }`}
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
           >
             <Send className="w-5 h-5" />
           </button>
