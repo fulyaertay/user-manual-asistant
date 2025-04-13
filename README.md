@@ -11,5 +11,7 @@ User can upload any user manual as pdf, enter Gemini API key and can ask any que
 ### Chat Screen with Dark Theme
 ![alt text](chat_screen_dark.png)
 
+```
 -You can test the asistant using 1611326989437casper_nirvana_F850_kullanim_kilavuzu.pdf user manual
 -Using technologies; Google AI Studio and https://bolt.new/
+```
